@@ -19,28 +19,28 @@ services:
 
 
 
-  weaviate:
-    command:
-    - --host
-    - 0.0.0.0
-    - --port
-    - '8080'
-    - --scheme
-    - http
-    image: cr.weaviate.io/semitechnologies/weaviate:1.34.0
-    container_name: bmvh_weaviate
-    ports:
-    - 8080:8080
-    - 50051:50051
-    volumes:
-      - ./weaviate:/var/lib/weaviate
-    restart: on-failure:0
-    environment:
-      # SSL_CERT_FILE: 'C:\Users\Asher\OneDrive - Aspect ICT\Documenten\_Projects\HSG\Python\HSG\.venv\Lib\site-packages\certifi\cacert.pem'
-      QUERY_DEFAULTS_LIMIT: 25
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      CLUSTER_HOSTNAME: 'node1'
+  # weaviate:
+  #   command:
+  #   - --host
+  #   - 0.0.0.0
+  #   - --port
+  #   - '8080'
+  #   - --scheme
+  #   - http
+  #   image: cr.weaviate.io/semitechnologies/weaviate:1.34.0
+  #   container_name: bmvh_weaviate
+  #   ports:
+  #   - 8080:8080
+  #   - 50051:50051
+  #   volumes:
+  #     - ./weaviate:/var/lib/weaviate
+  #   restart: on-failure:0
+  #   environment:
+  #     # SSL_CERT_FILE: 'C:\Users\Asher\OneDrive - Aspect ICT\Documenten\_Projects\HSG\Python\HSG\.venv\Lib\site-packages\certifi\cacert.pem'
+  #     QUERY_DEFAULTS_LIMIT: 25
+  #     AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+  #     PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+  #     CLUSTER_HOSTNAME: 'node1'
 
   
 
