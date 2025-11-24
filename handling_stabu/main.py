@@ -16,7 +16,7 @@ from aspect_foundry.sql import SQLStorageHandler
 from aspect_foundry.chat import ChatClient
 from aspect_foundry.classifier import ScopeClassifier
 
-from stabu_helpers import build_stabu_from_csv, get_stabu_list, get_stabu_chunk
+from handling_stabu.stabu_helpers import build_stabu_from_csv, get_stabu_list, get_stabu_chunk, get_additional_stabu_info
 
 #######################################################################################
 # Credentials
@@ -91,7 +91,13 @@ table_classifications_creation = """
         blob_uuid UNIQUEIDENTIFIER NOT NULL,
         category VARCHAR(5) NOT NULL,
         confidence VARCHAR(7) NOT NULL,
-        reasoning VARCHAR(255) NOT NULL
+        reasoning VARCHAR(1020) NOT NULL,
+        totaal_prijs FLOAT NOT NULL, 
+        totaal_eenheid FLOAT NOT NULL, 
+        eenheid VARCHAR(10) NOT NULL, 
+        prijs_per_eenheid FLOAT NOT NULL, 
+        prijs_per_eenheid_onderbouwing VARCHAR(1020) NOT NULL,
+        context VARCHAR(1020) NOT NULL
     )
 """
 table_creation_queries=[
@@ -138,16 +144,20 @@ chat = ChatClient(
 
 # STABU classifier configurations
 # NOTE: FOR THE DEMO WE WILL ONLY ACCESS CATEGORY 22 and 30
-stabu_list = get_stabu_list(sqlHandler=sqlHandler, filter_category=[22, 30])
+stabu_list = get_stabu_list(sqlHandler=sqlHandler, filter_category=(22, 30))
 
-with open(file="handling_stabu/prompt.txt", mode="r") as file:
-    prompt = file.read()
+with open(file="handling_stabu/prompt_classify.txt", mode="r") as file:
+    prompt_classify = file.read()
 
 scopeClassifier = ScopeClassifier(
     categories=stabu_list,
     chat=chat,
-    prompt=prompt
+    prompt=prompt_classify
 )
+
+# Load prompt details doc
+with open(file="handling_stabu/prompt_details.txt", mode="r") as file:
+    prompt_details = file.read()
 
 #######################################################################################
 # Bestek handling
@@ -198,25 +208,28 @@ class Bestek:
         # chunker = SpecChunker()
         # chunks_list = chunker.chunk_pdf(pdf_path=f"tmp/{self.name_bestek}")
         
-        # TODO: make following part suitable for just one pdf text, instead of for chunks
         # Fetch SFI codes that were detected inside of chunk and append to SQL
-        
-        # TODO: HIER WAREN WIJ GEBLEVEN
-        # TODO: stabu list lijkt niet goed gefilterd te worden, waardoor veel te veel categorien meegestuurd worden naar de AI...
-        print(stabu_list)
-        return
-        # TODO: HIER WAREN WIJ GEBLEVEN
     
         # Read text, compare to stabu's and create one large dict of FILTERED classifications
         filtered_classification = get_stabu_chunk(text=text, n=n, batch=batch, scopeClassifier=scopeClassifier)
-        # Iterate every classification with 'met' > 0 and upload to classifications SQL db
-        for criteria_values in filtered_classification.values():
+        
+        # Prompt the AI to figure out the exact details of each stabu found
+        detailed_classification = get_additional_stabu_info(text=text, prompt=prompt_details, classification=filtered_classification, chat=chat)
+        
+        # Iterate every classification with 'met' = x/x and upload to classifications SQL db
+        for criteria_values in detailed_classification.values():
             for criterion, criterion_values in criteria_values.items():
                 reasoning = criterion_values["reasoning"]
                 met = criterion_values["met"]
+                totaal_prijs = criterion_values["totaal_prijs"]
+                totaal_eenheid = criterion_values["totaal_eenheid"]
+                eenheid = criterion_values["eenheid"]
+                prijs_per_eenheid = criterion_values["prijs_per_eenheid"]
+                prijs_per_eenheid_onderbouwing = criterion_values["prijs_per_eenheid_onderbouwing"]
+                context =  criterion_values["context"]
                 
-                params = (str(self.uuid_bestek), criterion, met, reasoning[0])
-                sqlHandler.insert(f"INSERT INTO {table_classifications_name} (blob_uuid, category, confidence, reasoning) VALUES (%s, %s, %s, %s);", params=params)
+                params = (str(self.uuid_bestek), criterion, met, reasoning[0], totaal_prijs, totaal_eenheid, eenheid, prijs_per_eenheid, prijs_per_eenheid_onderbouwing, context)
+                sqlHandler.insert(f"INSERT INTO {table_classifications_name} (blob_uuid, category, confidence, reasoning, totaal_prijs, totaal_eenheid, eenheid, prijs_per_eenheid, prijs_per_eenheid_onderbouwing, context) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", params=params)
 
         # Delete the tmp .pdf file right away
         os.remove(f"tmp/{self.name_bestek}")
@@ -245,10 +258,10 @@ class Bestek:
 #######################################################################################
 if __name__ == "__main__":
     # TODO: Find some way to input the bestek.pdf from the front-end
-    file_name = "2211-metselwerk-offerte.txt"
-    # file_name = '2211-metselwerk-offerte-APR.txt'
+    # file_name = "2211-metselwerk-offerte.txt" # Geindexeerd
+    # file_name = '2211-metselwerk-offerte-APR.txt' # Zelfde als bovenstaande
     # file_name = '2211-metselwerk-offerte-LEEN.txt'
-    # file_name = '3011-kozijnen-offerte-vdvin.txt'
+    file_name = '3011-kozijnen-offerte-vdvin.txt' # Geindexeerd
     # file_name = '3011-kozijnen-offerte-vErk.txt'
     local_file_path = f'../../Data/offertes_txt/{file_name}'
 
@@ -258,19 +271,28 @@ if __name__ == "__main__":
     # bestek.remove(all=True)
 
     # --------< Bestek preprocessing >--------
-    bestek.preprocess(local_file_path, n=2, batch=10)
+    # bestek.preprocess(local_file_path, n=2, batch=10)
 
     # Bestek uuid fetching
-    # blob_uuid = blobHandler.get_blob_uuid("A2957-0890-Rev02-Outline specification.pdf")
-    # blob_uuid = uuid.UUID('305bba59-4e0e-49f5-815c-c73a544fb956')
+    blob_uuid = blobHandler.get_blob_uuid(file_name)
+    # blob_uuid = uuid.UUID('9ffbe8f3-a9b3-4a51-b1c8-de4ace036f82')
 
 
     # --------< Query examples with SQL response>--------
-    # results = sqlHandler.select("SELECT * FROM chunks WHERE blob_uuid='14fb9a14-00af-4c0d-94f5-557cf25b0bd3' AND category='15.' AND confidence='1/2'")
-    # for result in results:
-    #     print(f"[{result[1]}]: confidence {result[3]}")
-    #     print(f"     - {result[2]}")
-    #     print(f"     - {result[4]}\n")
+    results = sqlHandler.select(f"SELECT * FROM {table_classifications_name} WHERE blob_uuid='{blob_uuid}'")
+    for result in results:
+        blob_uuid = result[0]
+        category = result[1]
+        confidence = result[2]
+        reasoning = result[3]
+        totaal_prijs = result[4]
+        totaal_eenheid = result[5]
+        eenheid = result[6]
+        prijs_per_eenheid = result[7]
+        prijs_per_eenheid_onderbouwing = result[8]
+        context = result[9]
+
+        print(category, "\n", confidence, "\n", reasoning, "\n", totaal_prijs, "\n", totaal_eenheid, "\n", eenheid, "\n", prijs_per_eenheid, "\n", prijs_per_eenheid_onderbouwing, "\n", context, "\n\n")
 
     # SQL stabu browser
     # results = sqlHandler.select("SELECT * FROM stabu")

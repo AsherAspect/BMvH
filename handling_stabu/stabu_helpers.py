@@ -1,4 +1,5 @@
 import os
+import json
 
 import pandas as pd
 
@@ -67,8 +68,7 @@ def get_stabu_list(sqlHandler, filter_category=None):
     if filter_category == None:
         SQL_categories_len = "SELECT * FROM stabu WHERE LEN(category) = 2"
     else:
-        SQL_categories_len = ("SELECT * FROM stabu WHERE LEN(category) = 2 AND category LIKE '%(filter_category)s^^^'" % {"filter_category":filter_category}).replace("^^^", "%")
-    
+        SQL_categories_len = ("SELECT * FROM stabu WHERE LEN(category) = 2 AND category IN %(filter_category)s" % {"filter_category":filter_category})
     
     SQL_categories = sqlHandler.select(SQL_categories_len)
     
@@ -78,8 +78,8 @@ def get_stabu_list(sqlHandler, filter_category=None):
         category["category"] = SQL_category[0]
         category["name"] = SQL_category[1]
 
-        SQL_category_len = ("SELECT * FROM stabu WHERE LEN(category) = 5 AND category LIKE '%(category)s^^^'" % {"category":category["category"][0]}).replace("^^^", "%")
-
+        SQL_category_len = ("SELECT * FROM stabu WHERE LEN(category) = 5 AND category LIKE '%(category)s^^^'" % {"category":category["category"]}).replace("^^^", "%")
+        
         criteria = {}
         
         SQL_criteria = sqlHandler.select(SQL_category_len)
@@ -104,14 +104,14 @@ def get_stabu_chunk(text, n, batch, scopeClassifier):
 
     # Filter out the STABU codes which had their conditions met
     def get_positive_stabu(classification):
-        # Filter out criteria, with at least one positive classification
+        # Filter out criteria, with FULL positive classification
         positive_classification = {}
         for full_category, criteria_dict in classification.items():
             positive_classification[full_category] = {}
             for criterion, criterion_contents in criteria_dict.items():
-                met = criterion_contents["met"]
-                reasoning = criterion_contents["reasoning"]
-                if int(met.split("/")[0]) > 0:
+                met = criterion_contents["met"].split("/")
+                # if int(met.split("/")[0]) > 0: # filter on at least one positive
+                if int(met[0]) == int(met[1]):
                     positive_classification[full_category][criterion] = criterion_contents
         # Remove categories that ended up being empty, since none of the criteria matched the context
         filtered_classification = {}
@@ -138,6 +138,25 @@ def get_stabu_chunk(text, n, batch, scopeClassifier):
 
     # Retrieve full classification for every category, then ONLY fetch the classifications with 'met' > 1
     full_classification = scopeClassifier.classify(text, batch_size=batch, n=n, simplify_output=True)
+    
     filtered_classification = get_positive_stabu(full_classification)
 
     return filtered_classification
+
+
+#######################################################################################
+# Reiterate provided positive classifications and look up additional information
+#######################################################################################
+def get_additional_stabu_info(text, prompt, classification, chat):
+    prompt = prompt.replace("<<TEXT>>", text)
+    prompt = prompt.replace("<<CATEGORIES>>", json.dumps(classification))
+
+    # Request response from openai chat (try 3x to be safe)
+    for attempt in range (3):
+        try:
+            response = chat.openai_llm(prompt).choices[0].message.content
+
+            return json.loads(response)
+        except json.JSONDecodeError:
+            print("\n[get_additional_stabu_info]: LLM failed to return valid JSON, you should improve prompting instruction to return a valid JSON if this happens too frequently.")
+            print("[get_additional_stabu_info]: The response that should have been parsed by json.loads(): \n", response, "\n\n")
