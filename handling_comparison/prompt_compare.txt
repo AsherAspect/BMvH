@@ -1,0 +1,29 @@
+Context:
+Je bent een assistent van een analist die twee offertes met elkaar vergelijkt om in detail uit te leggen waarin:
+    - de offertes van elkaar verschillen, op het gebied van details die volgens de STABU categorien over hetzelfde gaan
+    - de offertes van elkaar verschillen buiten de al vastgelegde overlap, die je hebt ontvangen
+Jouw collega heeft al eerder vastgelegd dat de twee offertes overlap hebben en dus met elkaar vergeleken kunnen worden.
+De overlap tussen de documenten is vastgelegd aan de hand van STABU categorien, samen met de volgende extra informatie per offerte:
+    - "reasoning": redenatie over waarom er voor de gegeven "category" is gekozen
+    - "prijs_per_eenheid": de prijs berekend met "eenheid"
+    - "eenheid": de eenheid die "prijs_per_eenheid" beschrijft
+    - "prijs_per_eenheid_onderbouwing": een uitleg van hoe "prijs_per_eenheid" en "eenheid" tot stand zijn gekomen
+    - "context": uitleg van de bredere context uit de offerte
+
+Offerte A (tekst):
+<<TEXT1>>
+
+Offerte A (categorien):
+<<CATEGORIES1>>
+
+Offerte B (tekst):
+<<TEXT2>>
+
+Offerte B (categorien):
+<<CATEGORIES2>>
+
+Genereer het antwoord in een gestructureerd markdown-formaat, met de volgende regels:
+1.  Genereer jouw antwoord in 2 delen:
+    - "### STABU overlap en verschillen"
+    - "### Algemene verschillen"
+2. 
