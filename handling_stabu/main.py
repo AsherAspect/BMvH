@@ -260,8 +260,8 @@ if __name__ == "__main__":
     # TODO: Find some way to input the bestek.pdf from the front-end
     # file_name = "2211-metselwerk-offerte.txt" # Geindexeerd
     # file_name = '2211-metselwerk-offerte-APR.txt' # Zelfde als bovenstaande
-    # file_name = '2211-metselwerk-offerte-LEEN.txt'
-    file_name = '3011-kozijnen-offerte-vdvin.txt' # Geindexeerd
+    file_name = '2211-metselwerk-offerte-LEEN.txt' # NOTE: tijdens demo
+    # file_name = '3011-kozijnen-offerte-vdvin.txt' # Geindexeerd
     # file_name = '3011-kozijnen-offerte-vErk.txt'
     local_file_path = f'../../Data/offertes_txt/{file_name}'
 
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     # bestek.remove(all=True)
 
     # --------< Bestek preprocessing >--------
-    # bestek.preprocess(local_file_path, n=2, batch=10)
+    bestek.preprocess(local_file_path, n=2, batch=10)
 
     # Bestek uuid fetching
     blob_uuid = blobHandler.get_blob_uuid(file_name)

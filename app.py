@@ -1,5 +1,7 @@
 # python -m streamlit run app.py
+# you have to create a new terminal
 import os
+import openai
 
 from dotenv import load_dotenv
 
@@ -10,6 +12,7 @@ import plotly.express as px
 
 from aspect_foundry.sql import SQLStorageHandler
 from aspect_foundry.azurite import AzuriteBlobHandler
+from aspect_foundry.chat import ChatClient
 from handling_stabu.main import Bestek
 from handling_stabu.stabu_helpers import get_stabu_list
 
@@ -34,6 +37,9 @@ connection_string = (
     f"BlobEndpoint={os.getenv("AZURE_BLOB_ENDPOINT")};"
 )
 
+# <<ChatClient>> credentials
+clientOpenAI = openai.OpenAI(base_url="https://api.openai.com/v1", api_key=os.getenv("OPENAI_PASSWORD"))
+
 #######################################################################################
 # Configurations (IMPERATIVE FOR INIT FUNCTIONS)
 #######################################################################################
@@ -44,21 +50,28 @@ container_name = "bestekken"
 table_blobs_name = "blobs"
 blobHandler = AzuriteBlobHandler(container_name=container_name, connection_string=connection_string, sqlHandler=sqlHandler, table_blobs_name=table_blobs_name)
 
+# Chat with openai configuration
+chat = ChatClient(
+    client=clientOpenAI,
+    model="gpt-5.1",
+    role="assistant"
+)
+
+with open(file="handling_comparison/prompt_compare.txt", mode="r") as file:
+    prompt_compare = file.read()
+
 #######################################################################################
 # Interface communications (and restructuring)
 #######################################################################################
 class Interface():
     def __init__(self):
         self.pages = {
-            # TODO: Zet table weer boven
-            "Boxplot": self.page_boxplot,
             "Table": self.page_table,
-            
-            "Uploading": self.page_uploading_doc
+            "Boxplot": self.page_boxplot
         }
 
         df = pd.DataFrame(sqlHandler.select("SELECT * FROM classifications"))
-        df = df.set_axis(["blob_uuid", "category", "confidence", "reasoning", "totaal_prijs", "totaal_eenheid", "eenheid", "prijs_per_eenheid", "prijs_per_eenheid_onderbouwing", "context"], axis=1)
+        df = df.set_axis(["blob_uuid", "category", "confidence", "reasoning", "totaal_prijs", "totaal_eenheid", "eenheid", "prijs_per_eenheid", "prijs_per_eenheid_onderbouwing", "context"], axis=1).astype({"blob_uuid": str})
 
         # Convert blob_uuid into bestand
         files = []
@@ -67,9 +80,9 @@ class Interface():
         df["bestand"] = pd.Series(files)
 
         # TODO: GET MORE DATA INSTEAD OF MOCK
-        df_mock = pd.read_csv("../../Data/df_with_mock_data.csv", dtype={"category": float}).round(2).drop("Unnamed: 0", axis=1).drop("blob_uuid", axis=1)
+        df_mock = pd.read_csv("../../Data/df_with_mock_data.csv", dtype={"category": float}).round(2).drop("Unnamed: 0", axis=1)
         df_mock["category"] = df_mock["category"].apply(lambda x: f"{x:.2f}")
-        self.df = pd.concat([df.drop("blob_uuid", axis=1), df_mock], ignore_index=True)
+        self.df = pd.concat([df, df_mock], ignore_index=True)
 
         # Append a column with category names to self.df
         stabu_list = get_stabu_list(sqlHandler=sqlHandler, filter_category=(22, 30))
@@ -167,6 +180,25 @@ class Interface():
         st.plotly_chart(fig, use_container_width=True)
 
 
+    
+    @staticmethod
+    def _upload_doc(uploaded_file):
+        st.title("Offerte wordt geupload")
+        st.write("- U wordt vanzelf naar een andere pagina gestuurd wanneer het laden klaar is.")
+
+
+        # Write the file to disk
+        path = f"tmp/{uploaded_file.name}"
+
+        with open(path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+        bestek = Bestek()
+        bestek.preprocess(path=path, n=2, batch=10)
+
+        # Inform of mission success
+        return True
+
 
 
     def page_table(self):
@@ -216,7 +248,11 @@ class Interface():
 
         # Check if a file was uploaded
         if uploaded_file is not None:
-            self._preprocess_doc(uploaded_file=uploaded_file)
+            # Redirect to table page
+            success = self._upload_doc(uploaded_file=uploaded_file)
+
+            if success:
+                st.write("- Uploaden is gelukt!")
             
             
 
@@ -228,11 +264,11 @@ class Interface():
         lines = []
 
         # Filters
-        # NOTE: Interessante filters --> ("22.72", "m2"), ("30.33", "st")
+        # NOTE: Interessante filters --> ("22.72", "m2"), ("30.33", "st"), ("30.32", "m2")
         st.sidebar.header("Filters")
         filter_offerte = st.sidebar.multiselect("Offerte", options=self.df["bestand"].unique())
-        filter_category = st.sidebar.multiselect("Categorie", options=self.df["category"].unique(), default=["30.00"])
-        filter_eenheid = st.sidebar.multiselect("Eenheid", options=self.df["eenheid"].unique(), default=["proj"])
+        filter_category = st.sidebar.multiselect("Categorie", options=self.df["category"].unique(), default=["30.33"])
+        filter_eenheid = st.sidebar.multiselect("Eenheid", options=self.df["eenheid"].unique(), default=["st"])
         filter_std = st.sidebar.slider("Standaarddeviatie", 1, 4, 3)
 
         # Apply filters
@@ -267,31 +303,43 @@ class Interface():
             df_overlap = self._get_file_overlap(self.df[(self.df["bestand"] == filter_offerte[0]) | (self.df["bestand"] == filter_offerte[1])], names_list=filter_offerte).drop_duplicates(subset=["category", "bestand"])
             
             # NOTE: Print statement to show interesting data that helps finding interesting visualization that can be used as default visualizations
-            print(df_overlap[["category", "bestand", "prijs_per_eenheid", "eenheid"]])
+            # print(df_overlap[["category", "bestand", "prijs_per_eenheid", "eenheid"]])
 
             # If at least one category is overlapping between the 2 selected files; create button to compare with AI
             if len(df_overlap) >= 2:
+
+                # Button click triggers AI prompt to clarify the difference between the two selected docs
                 if st.button("Vraag AI-Agent", type="primary"):
-                    st.markdown("COMPARING RN")
+                    st.markdown("Even geduld; de offertes worden vergeleken:")
+
+                    # Request the documents from storage into tmp/
+                    loaded_texts = []
+                    loaded_categories = []
+                    for single_blob_name in df_overlap["bestand"].unique().tolist():
+                        blobHandler.load.from_name(single_blob_name, output_path=f"tmp/")
+
+                        # Read the document and load into ram
+                        with open(f"tmp/{single_blob_name}", mode="r") as f:
+                            loaded_texts.append(f.read())
+
+                        # remove tmp/...
+                        os.remove(f"tmp/{single_blob_name}")
+
+                        # Get JSON from dataframe where all categories are from the same document
+                        loaded_categories.append(df_overlap[(df_overlap["bestand"] == single_blob_name)][["bestand", "category", "reasoning", "totaal_prijs", "totaal_eenheid", "eenheid", "prijs_per_eenheid", "prijs_per_eenheid_onderbouwing", "context"]].to_json(orient="records", indent=4))
+
+
+                    # Configure the prompt
+                    configured_prompt_compare = prompt_compare.replace("<<TEXT1>>", loaded_texts[0]).replace("<<TEXT2>>", loaded_texts[1]).replace("<<CATEGORIES1>>", loaded_categories[0]).replace("<<CATEGORIES2>>", loaded_categories[1])
+
+                    # Prompt the LLM
+                    st.markdown(chat.openai_llm(configured_prompt_compare).choices[0].message.content)
+                    
+
             else:
                 st.markdown("⚠️ Geselecteerde offertes hebben geen onderlinge overlap op een categorie.")
 
 
-    def page_uploading_doc(self, uploaded_file):
-        st.title("Offerte wordt geupload")
-        st.write("U wordt vanzelf naar een andere pagina gestuurd wanneer het laden klaar is.")
-
-
-        # Write the file to disk
-        path = f"tmp/{uploaded_file.name}"
-
-        with open(path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-
-        bestek = Bestek()
-        bestek.preprocess(path=path, n=2, batch=10)
-
-    
 
     def run(self):
         page = st.sidebar.selectbox("Pagina", list(self.pages.keys()))

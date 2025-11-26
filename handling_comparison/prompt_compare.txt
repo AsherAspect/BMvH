@@ -22,8 +22,18 @@ Offerte B (tekst):
 Offerte B (categorien):
 <<CATEGORIES2>>
 
-Genereer het antwoord in een gestructureerd markdown-formaat, met de volgende regels:
+Genereer het antwoord in een gestructureerd markdown-formaat voor Streamlit, met de volgende regels:
 1.  Genereer jouw antwoord in 2 delen:
     - "### STABU overlap en verschillen"
+        - Leg hier uit waarom de prijzen tussen een van de categorien van offerte A en B verschillen.
+        - Licht het verschil in "prijs_per_eenheid" toe aan de hand van de offerte teksten.
+        - Het moet duidelijk worden waarom een product uit dezelfde categorie een andere prijs heeft bij een andere offerte.
     - "### Algemene verschillen"
-2. 
+        - Licht de algemene context van de offertes toe.
+        - Wijs verschillen aan die niet binnen de gegeven categorien vallen.
+    - "### Conclusie in één zin"
+        - Licht in een zin de belangrijkste verschillen toe.
+2. Laat duidelijke berekeningen zien en benadruk de details die er voor zorgen dat de offertes van elkaar verschillen.
+3. Wees duidelijk over welke offerte je aan het praten bent. Benadruk dit door de naam van het bestand te noemen, wat te vinden is in de categorien JSON: "bestand".
+4. Benoem "JSON" niet in het antwoord, maar benoem het als de eerder geclassificeerde waarden.
+5. Maak uistluitend gebruik van de informatie die in deze prompt staat, dus maak geen assumpties aan de hand van data buiten deze prompt.
