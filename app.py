@@ -1,5 +1,3 @@
-# python -m streamlit run app.py
-# you have to create a new terminal
 import os
 import openai
 
@@ -64,12 +62,29 @@ with open(file="handling_comparison/prompt_compare.txt", mode="r") as file:
 # Interface communications (and restructuring)
 #######################################################################################
 class Interface():
+    """
+    The interface class manages interface pages, where a function call will load a page.
+    It also holds internal static functions, which function as subprocesses to make all functions more readable.
+    """
+
     def __init__(self):
+        """
+        Initialize visualization pages.
+
+        Prepare data for querying:
+            - Loading all available classifications from all documents into a single dataframe for access.
+                - Fix: Loading the queried categories live from SQL into a dataframe
+            - Generate all file names from the found UUID's to ensure a user knows which document they are handling.
+            - Generate all STABU names from the found STABU codes, for more direct insights.
+
+        """
+
         self.pages = {
             "Table": self.page_table,
             "Boxplot": self.page_boxplot
         }
-
+        
+        # Convert SQL into dataframe
         df = pd.DataFrame(sqlHandler.select("SELECT * FROM classifications"))
         df = df.set_axis(["blob_uuid", "category", "confidence", "reasoning", "totaal_prijs", "totaal_eenheid", "eenheid", "prijs_per_eenheid", "prijs_per_eenheid_onderbouwing", "context"], axis=1).astype({"blob_uuid": str})
 
@@ -98,6 +113,17 @@ class Interface():
 
     @staticmethod
     def _get_file_overlap(df, names_list):
+        """
+        Takes a dataframe and two files (by name), and drops every row between the files, where "category" and "eenheid" are not overlapping.
+
+        Parameters:
+            df (pd.DataFrame): The dataframe that contains rows with at least the the files inside of names_list that are contained within "bestand". This is where the overlapping "category" and "eenheid" between the files will be returned from.
+            names_list (list): A list with 2 items, where each item is a filename.
+
+        Returns:
+            pd.DataFrame: The same DataFrame from the input, but without the categories that are not overlapping.
+        """
+
         # Filter out values with no given price per unit
         df = df[(df["prijs_per_eenheid"] != 0)]
         
@@ -115,7 +141,7 @@ class Interface():
     @staticmethod
     def _remove_outliers(df, column, std_threshold=3):
         """
-        Removes rows from df where values in `column` are more than `std_threshold` standard deviations from the mean.
+        Removes rows from df where values in "column" are more than "std_threshold" standard deviations from the mean.
         
         Parameters:
             df (pd.DataFrame): The input DataFrame.
@@ -138,8 +164,12 @@ class Interface():
     @staticmethod
     def _build_boxplot(df, lines=None, title="Prijs per Eenheid per Categorie en Eenheid"):
         """
-        df: DataFrame with columns ["eenheid", "category", "prijs_per_eenheid"]
-        lines: list of tuples [(y_value: float, label: str), ...]
+        This function will directly construct a plotly box plot and insert it on the Streamlit page.
+
+        Parameters:
+            df (pd.DataFrame): DataFrame with columns ["eenheid", "category", "prijs_per_eenheid"]
+            lines (list): List of tuples that will be used to produce dotted horizontal lines to point out certain values that are selected [(y_value: float, label: str), ...]
+            title (str): The title of the box plot.
         """
         # Basic validation to help catch missing columns early
         required_cols = {"eenheid", "category", "prijs_per_eenheid"}
@@ -183,6 +213,15 @@ class Interface():
     
     @staticmethod
     def _upload_doc(uploaded_file):
+        """
+        This function uses the handling_stabu.main.bestek.preprocess() function to take a document and insert it into the blob storage, whilst identifying STABU categories.
+
+        Parameters:
+            uploaded_file (file): A document that has to be uploaded to the blob storage, and that has to be analyzed.
+
+        Returns:
+            True: (Bad practice) Show the parent process that we can now continue, for example by querying the document that was just uploaded.
+        """
         st.title("Offerte wordt geupload")
         st.write("- U wordt vanzelf naar een andere pagina gestuurd wanneer het laden klaar is.")
 
@@ -202,6 +241,11 @@ class Interface():
 
 
     def page_table(self):
+        """
+        Calling this function will load the searchable table page.
+        NOTE: calling this directly will render this page on top of the already existing HTML. This should only be called from "Pagina" selectbox.
+        """
+
         df_filtered = self.df.copy().sort_values(by=["category", "eenheid"]).drop_duplicates()
         
         # --------< Sidebar >--------
@@ -257,6 +301,11 @@ class Interface():
             
 
     def page_boxplot(self):
+        """
+        Calling this function will load the searchable box plot page, which also has a compare documents function, with an AI-generated comparison.
+        NOTE: calling this directly will render this page on top of the already existing HTML. This should only be called from "Pagina" selectbox.
+        """
+
         df_filtered = self.df.copy().sort_values(by=["category", "eenheid"]).drop_duplicates()
         df_filtered = df_filtered[(df_filtered["prijs_per_eenheid"] != 0) & (df_filtered["totaal_prijs"] != 0) & (df_filtered["totaal_eenheid"] != 0)]
         
@@ -346,7 +395,8 @@ class Interface():
         self.pages[page]()
 
 
-
+# python -m streamlit run app.py
+# you have to create a new terminal
 if __name__ == "__main__":
     interface = Interface()
     interface.run()

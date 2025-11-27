@@ -169,24 +169,17 @@ class Bestek:
 
 
     def preprocess(self, path, n, batch):
-        # TODO: rewrite
         """
         This function allows for the preprocessing of a certain file, which is obtained from a provided path.
         The preprocessing includes:
             1. Uploading the file to Azure with a generated UUID is name to allow for duplicates (an SQL instance keeps track of which file is associated to which UUID).
-            2. Separating the file into chunks for further processing.
-            3. Enriching the chunks with SFI categories that were matched to it, then uploading it to SQL.
-            4. Embedding the chunks into Weaviate to create the possibility of querying the chunk texts easily.
+            2. Enriching the documents with STABU categories that were matched to it, then uploading it to SQL.
 
         Preprocessing provides the ability to:
             - Access all preprocessed files in one central blob database.
             - Query SQL based on: blob_uuid, chunk_uuid, category, confidence, reasoning.
-            - Query Weaviate directly with hyrbid and text queries.
-            - Query Weaviate indirectly, based on SQL query output.
 
-        To understand the system architecture you can also view Miro: HSG - Calculatie Agent --> Bestek handling
-
-        Args:
+        Parameters:
             path (str): The full path to the file to be uploaded and preprocessed.
             n (int): The number of times the chat client should be called to classify the same piece of text.
             batch (int): Hard cap on when to split categories (XX), based on the max amount of criteria (YY) that is allowed in one prompt. This function will help to prevent the LLM from overloading by the sheer amount of categories provided.
